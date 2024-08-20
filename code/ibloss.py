@@ -33,8 +33,6 @@ class IBLoss(AbstractLossClass):
         global_mi_loss = (self.mi_calculator((self.softmax(p_tart.detach() / self.temp2)+1e-8).log(),self.softmax(p_tart_pure / self.temp2)) +
                           self.mi_calculator((self.softmax(p_sart.detach() / self.temp2)+1e-8).log(),self.softmax(p_sart_pure / self.temp2)))
         global_mi_loss = global_mi_loss.abs()
-        # global_mi_loss = torch.tensor(0.0001)
 
         loss_ib = torch.exp(-local_mi_loss) + 0.5*torch.exp(global_mi_loss)
-        # loss_ib=0
         return loss_ib, local_mi_loss, global_mi_loss

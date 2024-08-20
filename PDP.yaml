@@ -1,0 +1,154 @@
+设置文件: TIP all
+编码器: Eid1=Eid2=efficientnetb4
+解码器: 1 SANet，new decoder
+伪影融合: concat+conv1
+总体损失函数: loss = 2.5*loss_sha + 0.1*loss_reconstruction + 0.5*loss_ib + 0.5*loss_con
+身份对比损失: loss_id = 2-self.id_contrastive_loss(real_common, real_tar, real_src) + self.id_contrastive_loss(fake_common, fake_tar, fake_src) 
+对比总损失: loss = loss_id
+IB损失: loss_ib = torch.exp(-local_mi_loss) + 0.5*torch.exp(global_mi_loss) temp2=0.5
+特征解耦: 噪声引导聚合 x = (1-w1) * x + w1 * xnoise 使用双交叉注意力机制计算1个权重
+数据增强: 默认(p=0.6)，修改idx shuffle 0，bs，2*bs
+
+# log dir 
+log_dir: /mnt/raid1/zwj22/paper_models/DeepfakeBench-v2-main/training/logs/my_detection
+
+# model setting
+pretrained: /mnt/raid1/zwj22/paper_models/DeepfakeBench-v2-main/training/pretrained/efficientnet-b4-6ed6700e.pth   # path to a pre-trained model, if using one
+# pretrained: /mnt/raid1/zwj22/paper_models/DeepfakeBench-v2-main/training/pretrained/xception-b5690688.pth   # path to a pre-trained model, if using one
+model_name: mydetector   # model name
+# model_name: abmydetector   # model name
+# backbone_name: xception  # backbone name
+backbone_name: efficientnetb4  # backbone name
+encoder_feat_dim: 512  # feature dimension of the backbone
+
+#backbone setting
+backbone_config:
+  # mode: adjust_channel
+  mode: original
+  num_classes: 2
+  inc: 3
+  dropout: false
+  
+
+# dataset
+all_dataset: [FaceForensics++, FF-F2F, FF-DF, FF-FS, FF-NT, FaceShifter, DeepFakeDetection, Celeb-DF-v1, Celeb-DF-v2, DFDCP, DFDC, DeeperForensics-1.0, UADFV]
+train_dataset: [FaceForensics++]
+# test_dataset: [DFDCP]
+test_dataset: [FaceForensics++, Celeb-DF-v2, DFDCP]
+dataset_json_folder: '/mnt/raid1/zwj22/paper_models/DeepfakeBench-v2-main/preprocessing/dataset_json'
+dataset_type: pair
+
+compression: c23  # compression-level for videos
+train_batchSize: 16  # training batch size
+test_batchSize: 16   # test batch size
+workers: 0   # number of data loading workers
+frame_num: {'train': 4, 'test': 4}   # number of frames to use per video in training and testing
+resolution: 256   # resolution of output image to network
+with_mask: false   # whether to include mask information in the input
+with_landmark: false   # whether to include facial landmark information in the input
+save_ckpt: true   # whether to save checkpoint
+save_feat: true   # whether to save features
+# save_avg: true   # whether to save average ckpt
+
+# label settings
+label_dict:
+  # DFD
+  DFD_fake: 1
+  DFD_real: 0
+  FaceShifter: 1
+  FF-FH: 1
+  # FF++ + FaceShifter(FF-real+FF-FH)
+  # ucf specific label setting
+  FF-DF: 1
+  FF-F2F: 1
+  FF-FS: 1
+  FF-NT: 1
+  FF-real: 0
+  # CelebDF
+  CelebDFv1_real: 0
+  CelebDFv1_fake: 1
+  CelebDFv2_real: 0
+  CelebDFv2_fake: 1
+  # DFDCP
+  DFDCP_Real: 0
+  DFDCP_FakeA: 1
+  DFDCP_FakeB: 1
+  # DFDC
+  DFDC_Fake: 1
+  DFDC_Real: 0
+  # DeeperForensics-1.0
+  DF_fake: 1
+  DF_real: 0
+  # UADFV
+  UADFV_Fake: 1
+  UADFV_Real: 0
+
+
+
+# data augmentation
+use_data_augmentation: true  # Add this flag to enable/disable data augmentation
+data_aug:
+  flip_prob: 0.6
+  rotate_prob: 0.6
+  rotate_limit: [-10, 10]
+  blur_prob: 0.6
+  blur_limit: [3, 7]
+  brightness_prob: 0.6
+  brightness_limit: [-0.1, 0.1]
+  contrast_limit: [-0.1, 0.1]
+  quality_lower: 40
+  quality_upper: 100
+
+# mean and std for normalization
+mean: [0.5, 0.5, 0.5]
+std: [0.5, 0.5, 0.5]
+
+# optimizer config
+optimizer:
+  # choose between 'adam' and 'sgd'
+  type: adam
+  adam:
+    lr: 0.0001  # learning rate
+    beta1: 0.9  # beta1 for Adam optimizer
+    beta2: 0.999 # beta2 for Adam optimizer
+    eps: 0.00000001  # epsilon for Adam optimizer
+    weight_decay: 0.0005  # weight decay for regularization
+    amsgrad: false
+  sgd:
+    lr: 0.0002  # learning rate
+    momentum: 0.9  # momentum for SGD optimizer
+    weight_decay: 0.0005  # weight decay for regularization
+  adabelief:
+    lr: 0.0002
+    beta1: 0.9  # beta1 for Adam optimizer
+    beta2: 0.999 # beta2 for Adam optimizer
+    eps: 0.00000001  # epsilon for Adam optimizer
+    weight_decay: 0.0005  # weight decay for regularization
+    amsgrad: false
+
+# training config
+lr_scheduler: null   # learning rate scheduler step
+lr_step: 1
+lr_gamma: 0.4   # learning rate scheduler
+nEpochs: 15   # number of epochs to train for
+start_epoch: 0   # manual epoch number (useful for restarts)
+save_epoch: 1   # interval epochs for saving models
+rec_iter: 30   # interval iterations for recording
+logdir: ./logs   # folder to output images and logs
+manualSeed: 1024   # manual seed for random number generation
+
+# loss function
+loss_func:
+ cls_loss: cross_entropy   # loss function to use
+ con_loss: contrastive_regularization
+ rec_loss: l1loss
+ ib_loss: information_bottleneck
+losstype: null
+
+# metric
+metric_scoring: auc   # metric for evaluation (auc, acc, eer, ap)
+
+# cuda
+ngpu: 1   # number of GPUs to use
+cuda: true   # whether to use CUDA acceleration
+cudnn: true   # whether to use CuDNN for convolution operations

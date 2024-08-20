@@ -1,23 +1,9 @@
-设置文件: TIP all
-编码器: Eid1=Eid2=efficientnetb4
-解码器: 1 SANet，new decoder
-伪影融合: concat+conv1
-总体损失函数: loss = 2.5*loss_sha + 0.1*loss_reconstruction + 0.5*loss_ib + 0.5*loss_con
-身份对比损失: loss_id = 2-self.id_contrastive_loss(real_common, real_tar, real_src) + self.id_contrastive_loss(fake_common, fake_tar, fake_src) 
-对比总损失: loss = loss_id
-IB损失: loss_ib = torch.exp(-local_mi_loss) + 0.5*torch.exp(global_mi_loss) temp2=0.5
-特征解耦: 噪声引导聚合 x = (1-w1) * x + w1 * xnoise 使用双交叉注意力机制计算1个权重
-数据增强: 默认(p=0.6)，修改idx shuffle 0，bs，2*bs
-
 # log dir 
-log_dir: /mnt/raid1/zwj22/paper_models/DeepfakeBench-v2-main/training/logs/my_detection
+log_dir: /your file path
 
 # model setting
-pretrained: /mnt/raid1/zwj22/paper_models/DeepfakeBench-v2-main/training/pretrained/efficientnet-b4-6ed6700e.pth   # path to a pre-trained model, if using one
-# pretrained: /mnt/raid1/zwj22/paper_models/DeepfakeBench-v2-main/training/pretrained/xception-b5690688.pth   # path to a pre-trained model, if using one
+pretrained: /your file path   # path to a pre-trained model, if using one
 model_name: mydetector   # model name
-# model_name: abmydetector   # model name
-# backbone_name: xception  # backbone name
 backbone_name: efficientnetb4  # backbone name
 encoder_feat_dim: 512  # feature dimension of the backbone
 
@@ -33,22 +19,20 @@ backbone_config:
 # dataset
 all_dataset: [FaceForensics++, FF-F2F, FF-DF, FF-FS, FF-NT, FaceShifter, DeepFakeDetection, Celeb-DF-v1, Celeb-DF-v2, DFDCP, DFDC, DeeperForensics-1.0, UADFV]
 train_dataset: [FaceForensics++]
-# test_dataset: [DFDCP]
-test_dataset: [FaceForensics++, Celeb-DF-v2, DFDCP]
-dataset_json_folder: '/mnt/raid1/zwj22/paper_models/DeepfakeBench-v2-main/preprocessing/dataset_json'
+test_dataset: [Celeb-DF-v2]
+dataset_json_folder: 'your file path'
 dataset_type: pair
 
 compression: c23  # compression-level for videos
 train_batchSize: 16  # training batch size
 test_batchSize: 16   # test batch size
 workers: 0   # number of data loading workers
-frame_num: {'train': 4, 'test': 4}   # number of frames to use per video in training and testing
+frame_num: {'train': 16, 'test': 16}   # number of frames to use per video in training and testing
 resolution: 256   # resolution of output image to network
 with_mask: false   # whether to include mask information in the input
 with_landmark: false   # whether to include facial landmark information in the input
 save_ckpt: true   # whether to save checkpoint
 save_feat: true   # whether to save features
-# save_avg: true   # whether to save average ckpt
 
 # label settings
 label_dict:

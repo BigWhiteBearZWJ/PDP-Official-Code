@@ -34,9 +34,6 @@ from torch.utils.tensorboard import SummaryWriter
 
 from efficientnet_pytorch import EfficientNet
 from metrics.base_metrics_class import calculate_metrics_for_train
-from networks.iresnet import iresnet100
-from networks.igam import IGAM
-from networks.AdaAttn import AdaAttN
 
 from .base_detector import AbstractDetector
 from detectors import DETECTOR

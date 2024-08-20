@@ -54,10 +54,7 @@ class MyDetector(AbstractDetector):
         self.encoder_feat_dim = config['encoder_feat_dim']
         self.id_dim = self.encoder_feat_dim//2
         self.fingerprint_dim = self.encoder_feat_dim//2
-        # self.content_dim = self.encoder_feat_dim//2
 
-        # self.encoder_tid = self.build_backbone(config) 
-        # self.encoder_sid = self.build_backbone(config)
         self.encoder_tid = self.init_efficient()
         self.encoder_sid = self.init_efficient()
         logger.info('Load pretrained model successfully!')
@@ -154,9 +151,7 @@ class MyDetector(AbstractDetector):
             hidden_dim=self.fingerprint_dim, 
             out_f=self.fingerprint_dim
         )
-
-        # self.bottleneck = ChannelCompress(in_ch=512, out_ch=256, dropout=0.5)
-
+        
         # Identity Artifact Correlation Compression
         self.block_IACC = IACC(in_channels1=256, in_channels2=256, k_dim=8, v_dim=8, num_heads=8)
 
@@ -186,7 +181,6 @@ class MyDetector(AbstractDetector):
         rec_loss_class = LOSSFUNC[config['loss_func']['rec_loss']]
         ib_loss_class = LOSSFUNC[config['loss_func']['ib_loss']]
         cls_loss_func = cls_loss_class()
-        # spe_loss_func = spe_loss_class()
         con_loss_func = con_loss_class(margin=3.0)
         rec_loss_func = rec_loss_class()
         ib_loss_func = ib_loss_class()
@@ -265,22 +259,16 @@ class MyDetector(AbstractDetector):
 
         # 4. ib loss
         loss_ib = self.loss_func['ib'](pred_dict)
-        loss_ib, local_ib, global_ib = self.loss_func['ib'](pred_dict)
+        loss_ib, _, _= self.loss_func['ib'](pred_dict)
 
         # 5. total loss
-        # loss = loss_sha + 0.1*loss_spe + 0.3*loss_reconstruction + 0.05*loss_con
-        loss = 2.5*loss_sha + 0.1*loss_reconstruction + 0.5*loss_ib + 0.5*loss_con
-        # loss = 5*loss_sha + 0.1*loss_reconstruction + 0.5*loss_ib
-        # loss = 2.5*loss_sha + 0.1*loss_reconstruction + 0.5*loss_con
-        # loss = 7.5*loss_sha + 0.1*loss_reconstruction
+        loss = 5*loss_sha + 0.1*loss_reconstruction + 0.5*loss_ib + 0.5*loss_con
         loss_dict = {
             'overall': loss,
             'common': loss_sha,
             'reconstruction': loss_reconstruction,
             'contrastive': loss_con,
-            'iball': loss_ib,
-            'ibl': local_ib,
-            'ibg': global_ib,
+            'ib': loss_ib,
         }
         return loss_dict
 
@@ -333,7 +321,6 @@ class MyDetector(AbstractDetector):
         # split the features into the content and forgery
         features = self.features(data_dict)
         tar_features, src_features = features['tar'], features['src'] #[2*bs, 512, 8, 8]
-        # print(tar_features.shape)
 
         # get the prediction by classifier
         id_tar, f_tart= self.classifier_target(tar_features) #[2*bs, 256, 8, 8]
@@ -354,9 +341,6 @@ class MyDetector(AbstractDetector):
         pure_src_id, pure_src_art = self.block_IACC(id_src, f_sart, id_src_noise, sart_noise)
 
         mix_art_cat = torch.cat((pure_tar_art, pure_src_art), dim=1) #[2*bs, 512, 8, 8]
-
-        # ablation
-        # mix_art_cat = torch.cat((f_tart, f_sart), dim=1) #[2*bs, 512, 8, 8]
         mix_art_cls = self.block_mam(mix_art_cat) #[2*bs, 256, 8, 8]
 
         if inference:
@@ -403,11 +387,7 @@ class MyDetector(AbstractDetector):
             mix_art_cls[bs: bs*2] = mix_art_cls[idx_list]
 
         # concat spe and share to obtain new_id_all
-        # normal
         new_identity_all = torch.cat((pure_tar_id, pure_src_id), dim=1) #[2*bs, 512, 8, 8]
-        
-        # ablation
-        # new_identity_all = torch.cat((id_tar, id_src), dim=1) #[2*bs, 512, 8, 8]
 
         # reconstruction loss
         f2, f1 = mix_art_cat.chunk(2, dim=0) #[bs, 512, 8, 8]
@@ -470,31 +450,6 @@ def r_double_conv(in_channels, out_channels):
         nn.Conv2d(out_channels, out_channels, 3, padding=1),
         nn.ReLU(inplace=True)
     )
-
-class AdaIN(nn.Module):
-    def __init__(self, eps=1e-5):
-        super().__init__()
-        self.eps = eps
-        # self.l1 = nn.Linear(num_classes, in_channel*4, bias=True) #bias is good :)
-
-    def c_norm(self, x, bs, ch, eps=1e-7):
-        # assert isinstance(x, torch.cuda.FloatTensor)
-        x_var = x.var(dim=-1) + eps
-        x_std = x_var.sqrt().view(bs, ch, 1, 1)
-        x_mean = x.mean(dim=-1).view(bs, ch, 1, 1)
-        return x_std, x_mean
-
-    def forward(self, x, y):
-        assert x.size(0)==y.size(0)
-        size = x.size()
-        bs, ch = size[:2]
-        x_ = x.view(bs, ch, -1)
-        y_ = y.reshape(bs, ch, -1)
-        x_std, x_mean = self.c_norm(x_, bs, ch, eps=self.eps)
-        y_std, y_mean = self.c_norm(y_, bs, ch, eps=self.eps)
-        out =   ((x - x_mean.expand(size)) / x_std.expand(size)) \
-                * y_std.expand(size) + y_mean.expand(size)
-        return out
 
 def calc_mean_std(feat, eps=1e-5):
     # eps is a small value added to the variance to avoid divide-by-zero.
@@ -561,13 +516,8 @@ class Conditional_UNet(nn.Module):
         self.conv1 = nn.Conv2d(512, 512, 1)
         self.merge_conv_pad = nn.ReflectionPad2d((1, 1, 1, 1))
         self.merge_conv = nn.Conv2d(512, 512, (3, 3))
-        #self.dropout_half = HalfDropout(p=0.3)
         
-        # self.adain3 = AdaIN()
-        # self.adain2 = AdaIN()
-        # self.adain1 = AdaIN()
         self.sa3 = SANet(in_planes=512)
-        # self.adaattn = AdaAttN(in_planes=512)
 
         self.dconv_up3 = r_double_conv(512, 256)
         self.dconv_up2 = r_double_conv(256, 128)
@@ -579,38 +529,11 @@ class Conditional_UNet(nn.Module):
         #self.init_weight() 
         
     def forward(self, c, x):  # c is the style and x is the content [bs, 512, 8, 8]
-        # # x = self.adain3(x, c)
-        # x = self.sa3(x, c)
-        # x = self.upsample(x)
-        # x = self.dropout(x)
-        # x = self.dconv_up3(x) # [bs, 256, 16, 16]
-        # c = self.upsample(c)
-        # c = self.dropout(c)
-        # c = self.dconv_up3(c) # [bs, 256, 16, 16]
-
-        # # x = self.adain2(x, c)
-        # x = self.sa2(x, c)
-        # x = self.upsample(x)        
-        # x = self.dropout(x)     
-        # x = self.dconv_up2(x) # [bs, 128, 32, 32]
-        # c = self.upsample(c)        
-        # c = self.dropout(c)     
-        # c = self.dconv_up2(c) # [bs, 128, 32, 32]
-
-        # # x = self.adain1(x, c)
-        # x = self.sa1(x, c)
-        # x = self.upsample(x)
-        # x = self.dropout(x)
-        # x = self.dconv_up1(x) # [bs, 64, 64, 64]
-
         # new decoder
         cs = self.sa3(x, c) # [bs, 512, 8, 8]
         cs = self.conv1(cs)
         cs = cs + x
         cs = self.merge_conv(self.merge_conv_pad(cs))
-        # x_norm = mean_variance_norm(x)
-        # c_norm = mean_variance_norm(c)
-        # cs = self.adaattn(x, c, x_norm, c_norm)
         cs = self.upsample(cs)
         cs = self.dropout(cs)
         cs = self.dconv_up3(cs) # [bs, 256, 16, 16]
@@ -622,9 +545,6 @@ class Conditional_UNet(nn.Module):
         cs = self.dconv_up1(cs) # [bs, 64, 64, 64]
         cs = self.conv_last(cs)
         out = self.up_last(cs)  # [bs, 3, 256, 256]
-        
-        # x = self.conv_last(x)
-        # out = self.up_last(x)
         
         return self.activation(out)
 
@@ -777,50 +697,13 @@ class IACC(nn.Module):
         # 计算交互权重
         id_weight = self.id_crossattn(id, art)
         art_weight = self.id_crossattn(art, id)
-        # id_weight = self.sigmoid(self.id_crossattn(id, art))
-        # art_weight = self.sigmoid(self.id_crossattn(art, id))
         mix_weight = self.conv512(torch.cat((id_weight, art_weight), dim=1))
         mix_weight = self.sigmoid(mix_weight)
 
         # 利用权重进行信息压缩
-        # pure_id = (1-id_weight) * id + id_weight * idnoise
-        # pure_id = self.conv256(pure_id)
-        # pure_art = (1-art_weight) * art + art_weight * artnoise
-        # pure_art = self.conv256(pure_art)
         pure_id = (1-mix_weight) * id + mix_weight * idnoise
         pure_id = self.conv256(pure_id)
         pure_art = (1-mix_weight) * art + mix_weight * artnoise
         pure_art = self.conv256(pure_art)
 
         return pure_id, pure_art
-
-class ChannelCompress(nn.Module):
-    def __init__(self, in_ch=512, out_ch=256,dropout=0.5):
-        """
-        reduce the amount of channels to prevent final embeddings overwhelming shallow feature maps
-        out_ch could be 512, 256, 128
-        """
-        super(ChannelCompress, self).__init__()
-        num_bottleneck = 448
-        add_block = []
-        add_block += [nn.Linear(in_ch, num_bottleneck)]
-        add_block += [nn.BatchNorm1d(num_bottleneck)]
-        add_block += [nn.ReLU()]
-        add_block += [nn.Dropout(p=dropout)]
-        add_block += [nn.Linear(num_bottleneck, 384)]
-        add_block += [nn.BatchNorm1d(384)]
-        add_block += [nn.ReLU()]
-        add_block += [nn.Dropout(p=dropout)]
-        add_block += [nn.Linear(384, out_ch)]
-
-        # Extra BN layer, need to be removed
-        #add_block += [nn.BatchNorm1d(out_ch)]
-
-        add_block = nn.Sequential(*add_block)
-        # add_block.apply(weights_init_kaiming)
-        self.model = add_block
-
-    def forward(self, x):
-        x = self.model(x)
-        print("!!!")
-        return x

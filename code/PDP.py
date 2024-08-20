@@ -1,5 +1,5 @@
 '''
-# author: Weijie Zhouw
+# author: Weijie Zhou
 # date: 2024-7
 # description: Class for the PDPDetector
 
